@@ -1,0 +1,9 @@
+{
+  "ExampleService": {
+    "file": "classes/ExampleService.md",
+    "methods": {
+      "createRecord": "classes/ExampleService.md#createRecord",
+      "findRecord": "classes/ExampleService.md#findRecord"
+    }
+  }
+}

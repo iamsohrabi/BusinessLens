@@ -1,0 +1,65 @@
+{
+  "name": "businesslens",
+  "displayName": "BusinessLens",
+  "description": "Understand the business purpose of classes and methods from workspace documentation.",
+  "version": "0.1.5",
+  "publisher": "businesslens",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:.business-docs",
+    "onLanguage:typescript",
+    "onLanguage:javascript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascriptreact",
+    "onLanguage:csharp"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "businesslens.showDocumentation",
+        "title": "BusinessLens: Show Documentation"
+      },
+      {
+        "command": "businesslens.updateSymbol",
+        "title": "BusinessLens: Update Symbol Documentation"
+      },
+      {
+        "command": "businesslens.generateProjectDocumentation",
+        "title": "BusinessLens: Generate Project Documentation with DeepSeek"
+      },
+      {
+        "command": "businesslens.updateChangedDocumentation",
+        "title": "BusinessLens: Update Documentation for Changed Files"
+      },
+      {
+        "command": "businesslens.showPendingChanges",
+        "title": "BusinessLens: Show Pending Documentation Changes"
+      },
+      {
+        "command": "businesslens.refreshIndex",
+        "title": "BusinessLens: Refresh Documentation Index"
+      },
+      {
+        "command": "businesslens.openDocsFolder",
+        "title": "BusinessLens: Open Documentation Folder"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}
