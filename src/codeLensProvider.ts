@@ -73,7 +73,7 @@ export class BusinessLensCodeLensProvider implements vscode.CodeLensProvider {
           ? `${candidate.symbol.className}.${candidate.symbol.methodName}`
           : candidate.symbol.className;
         return new vscode.CodeLens(candidate.range, {
-          title: "$(book) BusinessLens • View business context",
+          title: "$(lightbulb) Why?",
           command: "businesslens.showDocumentation",
           arguments: [candidate.symbol, label]
         });
