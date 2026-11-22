@@ -23,6 +23,7 @@ export interface ScannedSourceFile {
   uri: vscode.Uri;
   relativePath: string;
   content: string;
+  originalContent: string;
   symbols: string[];
 }
 

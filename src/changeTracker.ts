@@ -119,7 +119,7 @@ export class ChangeTracker implements vscode.Disposable {
         continue;
       }
 
-      const submittedHash = contentHash(source.content);
+      const submittedHash = contentHash(source.originalContent);
       this.baseline[relativePath] = submittedHash;
       const uri = vscode.Uri.joinPath(
         this.workspaceUri,

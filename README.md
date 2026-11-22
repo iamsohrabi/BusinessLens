@@ -38,6 +38,13 @@ Git.
 - **BusinessLens: Update Symbol Documentation** selects the current source
   file for the update command.
 
+## Ignoring symbols
+
+Each class and method CodeLens has an **Ignore** action. Ignored symbols are
+excluded from initial documentation generation and future update inputs. Use
+**Include** on an ignored symbol to restore it. These choices are saved in the
+current VS Code workspace.
+
 ## Viewing documentation
 
 - Place the cursor inside a documented class or method and run **BusinessLens:

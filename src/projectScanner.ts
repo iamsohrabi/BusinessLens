@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { ScannedSourceFile } from "./types";
+import { ScannedSourceFile, SymbolDocumentation } from "./types";
 
 const sourceFilePattern = "**/*.{cs,ts,tsx,js,jsx}";
 const excludedFiles =
@@ -17,18 +17,41 @@ function isMethod(symbol: vscode.DocumentSymbol): boolean {
   );
 }
 
-function collectSymbols(symbols: vscode.DocumentSymbol[]): string[] {
+interface FilteredSymbols {
+  names: string[];
+  excludedRanges: vscode.Range[];
+}
+
+function collectSymbols(
+  symbols: vscode.DocumentSymbol[],
+  uri: vscode.Uri,
+  shouldIgnore: (uri: vscode.Uri, symbol: SymbolDocumentation) => boolean
+): FilteredSymbols {
   const found: string[] = [];
+  const excludedRanges: vscode.Range[] = [];
   const visit = (
     children: vscode.DocumentSymbol[],
     containingClass?: string
   ): void => {
     for (const symbol of children) {
       if (isClass(symbol)) {
+        const classSymbol = { className: symbol.name };
+        if (shouldIgnore(uri, classSymbol)) {
+          excludedRanges.push(symbol.range);
+          continue;
+        }
         found.push(`Class ${symbol.name}`);
         visit(symbol.children, symbol.name);
       } else {
         if (containingClass && isMethod(symbol)) {
+          const method = {
+            className: containingClass,
+            methodName: symbol.name
+          };
+          if (shouldIgnore(uri, method)) {
+            excludedRanges.push(symbol.range);
+            continue;
+          }
           found.push(`Method ${containingClass}.${symbol.name}`);
         }
         visit(symbol.children, containingClass);
@@ -36,7 +59,25 @@ function collectSymbols(symbols: vscode.DocumentSymbol[]): string[] {
     }
   };
   visit(symbols);
-  return found;
+  return { names: found, excludedRanges };
+}
+
+function removeRanges(
+  document: vscode.TextDocument,
+  ranges: vscode.Range[]
+): string {
+  let content = document.getText();
+  const offsets = ranges
+    .map(range => ({
+      start: document.offsetAt(range.start),
+      end: document.offsetAt(range.end)
+    }))
+    .sort((left, right) => right.start - left.start);
+
+  for (const range of offsets) {
+    content = content.slice(0, range.start) + content.slice(range.end);
+  }
+  return content;
 }
 
 export class ProjectScanner {
@@ -58,7 +99,11 @@ export class ProjectScanner {
 
   async scanSourceFiles(
     uris: vscode.Uri[],
-    includeWithoutSymbols = false
+    includeWithoutSymbols = false,
+    shouldIgnore: (
+      uri: vscode.Uri,
+      symbol: SymbolDocumentation
+    ) => boolean = () => false
   ): Promise<ScannedSourceFile[]> {
     const scanned: Array<ScannedSourceFile | undefined> = [];
     for (let offset = 0; offset < uris.length; offset += 8) {
@@ -70,16 +115,20 @@ export class ProjectScanner {
             const symbols = await vscode.commands.executeCommand<
               vscode.DocumentSymbol[] | undefined
             >("vscode.executeDocumentSymbolProvider", uri);
-            const detectedSymbols = symbols ? collectSymbols(symbols) : [];
-            if (detectedSymbols.length === 0 && !includeWithoutSymbols) {
+            const filteredSymbols = symbols
+              ? collectSymbols(symbols, uri, shouldIgnore)
+              : { names: [], excludedRanges: [] };
+            if (filteredSymbols.names.length === 0 && !includeWithoutSymbols) {
               return undefined;
             }
 
+            const originalContent = document.getText();
             return {
               uri,
               relativePath: this.getRelativePath(uri),
-              content: document.getText(),
-              symbols: detectedSymbols
+              content: removeRanges(document, filteredSymbols.excludedRanges),
+              originalContent,
+              symbols: filteredSymbols.names
             };
           })
         ))

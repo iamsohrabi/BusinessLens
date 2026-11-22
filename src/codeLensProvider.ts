@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { DocumentationService } from "./documentationService";
+import { SymbolIgnoreService } from "./symbolIgnoreService";
 import { SymbolDocumentation } from "./types";
 
 interface LensCandidate {
@@ -22,7 +23,10 @@ export class BusinessLensCodeLensProvider implements vscode.CodeLensProvider {
   private readonly changeEmitter = new vscode.EventEmitter<void>();
   readonly onDidChangeCodeLenses = this.changeEmitter.event;
 
-  constructor(private readonly documentation: DocumentationService) {}
+  constructor(
+    private readonly documentation: DocumentationService,
+    private readonly ignoredSymbols: SymbolIgnoreService
+  ) {}
 
   refresh(): void {
     this.changeEmitter.fire();
@@ -53,6 +57,9 @@ export class BusinessLensCodeLensProvider implements vscode.CodeLensProvider {
             range: symbol.selectionRange,
             symbol: { className: symbol.name }
           });
+          if (this.ignoredSymbols.isClassIgnored(document.uri, symbol.name)) {
+            continue;
+          }
           visit(symbol.children, symbol.name);
           continue;
         }
@@ -68,15 +75,34 @@ export class BusinessLensCodeLensProvider implements vscode.CodeLensProvider {
     };
     visit(symbols);
 
-    return candidates.map(candidate => {
-        const label = candidate.symbol.methodName
-          ? `${candidate.symbol.className}.${candidate.symbol.methodName}`
-          : candidate.symbol.className;
-        return new vscode.CodeLens(candidate.range, {
+    return candidates.flatMap(candidate => {
+      const { symbol } = candidate;
+      const isIgnored = this.ignoredSymbols.isIgnored(document.uri, symbol);
+      if (isIgnored) {
+        return [
+          new vscode.CodeLens(candidate.range, {
+            title: "$(eye) Include",
+            command: "businesslens.unignoreSymbol",
+            arguments: [symbol, document.uri]
+          })
+        ];
+      }
+
+      const label = symbol.methodName
+        ? `${symbol.className}.${symbol.methodName}`
+        : symbol.className;
+      return [
+        new vscode.CodeLens(candidate.range, {
           title: "$(lightbulb) Why?",
           command: "businesslens.showDocumentation",
-          arguments: [candidate.symbol, label]
-        });
-      });
+          arguments: [symbol, label]
+        }),
+        new vscode.CodeLens(candidate.range, {
+          title: "$(circle-slash) Ignore",
+          command: "businesslens.ignoreSymbol",
+          arguments: [symbol, document.uri]
+        })
+      ];
+    });
   }
 }

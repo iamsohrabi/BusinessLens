@@ -4,6 +4,7 @@ import { ChangeTracker } from "./changeTracker";
 import { DeepSeekService } from "./deepSeekService";
 import { DocumentationService } from "./documentationService";
 import { ProjectScanner } from "./projectScanner";
+import { SymbolIgnoreService } from "./symbolIgnoreService";
 import {
   ScannedSourceFile,
   SymbolDocumentation
@@ -38,12 +39,20 @@ function utf8Size(value: string): number {
 async function selectSources(
   scanner: ProjectScanner,
   uris: vscode.Uri[],
-  includeWithoutSymbols = false
+  includeWithoutSymbols = false,
+  shouldIgnore?: (
+    uri: vscode.Uri,
+    symbol: SymbolDocumentation
+  ) => boolean
 ): Promise<ScannedSourceFile[]> {
-  const sources = await scanner.scanSourceFiles(uris, includeWithoutSymbols);
+  const sources = await scanner.scanSourceFiles(
+    uris,
+    includeWithoutSymbols,
+    shouldIgnore
+  );
   if (sources.length === 0) {
     throw new Error(
-      "No source files containing detectable classes or methods were found."
+      "No non-ignored source files containing detectable classes or methods were found."
     );
   }
   return sources;
@@ -103,6 +112,18 @@ function isSymbolDocumentation(value: unknown): value is SymbolDocumentation {
     typeof candidate.className === "string" &&
     (candidate.methodName === undefined ||
       typeof candidate.methodName === "string")
+  );
+}
+
+function isUri(value: unknown): value is vscode.Uri {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Partial<vscode.Uri>;
+  return (
+    typeof candidate.scheme === "string" &&
+    typeof candidate.fsPath === "string" &&
+    typeof candidate.toString === "function"
   );
 }
 
@@ -220,7 +241,8 @@ export function registerCommands(
   refreshStatus: () => Promise<void>,
   scanner: ProjectScanner,
   deepSeek: DeepSeekService,
-  tracker: ChangeTracker
+  tracker: ChangeTracker,
+  ignoredSymbols: SymbolIgnoreService
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -244,6 +266,34 @@ export function registerCommands(
         const documents = await documentation.getBusinessContext(symbol);
         showBusinessContextPanel(title, documents);
       }
+    ),
+    vscode.commands.registerCommand(
+      "businesslens.ignoreSymbol",
+      withErrorNotification(
+        async (argument?: unknown, uriArgument?: unknown) => {
+          if (!isSymbolDocumentation(argument) || !isUri(uriArgument)) {
+            throw new Error(
+              "Cannot ignore this symbol because its location is missing."
+            );
+          }
+          await ignoredSymbols.setIgnored(uriArgument, argument, true);
+          codeLensProvider.refresh();
+        }
+      )
+    ),
+    vscode.commands.registerCommand(
+      "businesslens.unignoreSymbol",
+      withErrorNotification(
+        async (argument?: unknown, uriArgument?: unknown) => {
+          if (!isSymbolDocumentation(argument) || !isUri(uriArgument)) {
+            throw new Error(
+              "Cannot include this symbol because its location is missing."
+            );
+          }
+          await ignoredSymbols.setIgnored(uriArgument, argument, false);
+          codeLensProvider.refresh();
+        }
+      )
     ),
     vscode.commands.registerCommand(
       "businesslens.updateSymbol",
@@ -270,7 +320,12 @@ export function registerCommands(
       "businesslens.generateProjectDocumentation",
       withErrorNotification(async () => {
         const sourceUris = await scanner.findSourceUris();
-        const sources = await selectSources(scanner, sourceUris);
+        const sources = await selectSources(
+          scanner,
+          sourceUris,
+          false,
+          (uri, symbol) => ignoredSymbols.isIgnored(uri, symbol)
+        );
         if (sourceSize(sources) > maximumRequestCharacters) {
           throw new Error(
             "The project source exceeds the 100 KB automatic documentation request limit."
@@ -333,7 +388,11 @@ export function registerCommands(
               ...change.relativePath.split("/")
             )
           );
-        const sources = await scanner.scanSourceFiles(sourceUris, true);
+        const sources = await scanner.scanSourceFiles(
+          sourceUris,
+          true,
+          (uri, symbol) => ignoredSymbols.isIgnored(uri, symbol)
+        );
         const sourceByPath = new Map(
           sources.map(source => [source.relativePath, source])
         );
@@ -346,6 +405,7 @@ export function registerCommands(
               ),
               relativePath: change.relativePath,
               content: "[SOURCE FILE DELETED]",
+              originalContent: "[SOURCE FILE DELETED]",
               symbols: ["Deleted source file"]
             });
           }

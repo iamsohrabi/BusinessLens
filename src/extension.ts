@@ -5,6 +5,7 @@ import { registerCommands } from "./commands";
 import { DeepSeekService } from "./deepSeekService";
 import { DocumentationService } from "./documentationService";
 import { ProjectScanner } from "./projectScanner";
+import { SymbolIgnoreService } from "./symbolIgnoreService";
 
 const supportedLanguages = [
   "typescript",
@@ -21,7 +22,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   const documentation = new DocumentationService(workspaceFolder.uri);
-  const codeLensProvider = new BusinessLensCodeLensProvider(documentation);
+  const ignoredSymbols = new SymbolIgnoreService(
+    workspaceFolder.uri,
+    context.workspaceState
+  );
+  const codeLensProvider = new BusinessLensCodeLensProvider(
+    documentation,
+    ignoredSymbols
+  );
   const scanner = new ProjectScanner(workspaceFolder.uri);
   const deepSeek = new DeepSeekService();
   const tracker = new ChangeTracker(
@@ -102,7 +110,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     refreshStatus,
     scanner,
     deepSeek,
-    tracker
+    tracker,
+    ignoredSymbols
   );
 
   const indexWatcher = vscode.workspace.createFileSystemWatcher(
